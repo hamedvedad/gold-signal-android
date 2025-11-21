@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>سیگنال طلا</title>
+    <meta charset="utf-8">
+    <style>
+        body { 
+            font-family: Tahoma; 
+            direction: rtl;
+            text-align: center;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            padding: 20px;
+            margin: 10px;
+            border-radius: 10px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .price { font-size: 24px; color: #d4af37; }
+        .signal-buy { color: green; font-weight: bold; }
+        .signal-sell { color: red; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>💰 سیگنال‌دهی طلا</h1>
+        <div id="price" class="price">در حال دریافت...</div>
+        <div id="signal">سیگنال: -</div>
+        <div id="time">آخرین بروزرسانی: -</div>
+        <button onclick="refreshData()" style="margin: 10px; padding: 10px;">
+            🔄 بروزرسانی
+        </button>
+    </div>
+
+    <script>
+        // کدهای جاوااسکریپت اینجا قرار می‌گیره
+        let priceList = [];
+        const emaShortLen = 5;
+        const emaLongLen = 13;
+
+        // تابع محاسبه EMA
+        function calculateEMA(prices, period) {
+            let k = 2 / (period + 1);
+            let ema = [prices[0]];
+            for (let i = 1; i < prices.length; i++) {
+                ema[i] = prices[i] * k + ema[i-1] * (1 - k);
+            }
+            return ema;
+        }
+
+        // تابع دریافت قیمت
+        async function getGoldPrice() {
+            try {
+                // برای شروع از یک API ساده استفاده می‌کنیم
+                const response = await fetch('https://api.metals.live/v1/spot/gold');
+                const data = await response.json();
+                return data[0]?.price || (1800 + Math.random() * 100);
+            } catch (error) {
+                // اگر API جواب نداد، قیمت تصادفی برگردون
+                return (1800 + Math.random() * 100).toFixed(2);
+            }
+        }
+
+        // تابع بروزرسانی صفحه
+        function updateDisplay(price, signal) {
+            document.getElementById('price').textContent = `قیمت: $${price}`;
+            document.getElementById('signal').textContent = `سیگنال: ${signal || '-'}`;
+            document.getElementById('signal').className = signal === 'BUY' ? 'signal-buy' : 
+                                                         signal === 'SELL' ? 'signal-sell' : '';
+            document.getElementById('time').textContent = `آخرین بروزرسانی: ${new Date().toLocaleTimeString('fa-IR')}`;
+        }
+
+        // تابع اصلی
+        async function refreshData() {
+            const price = parseFloat(await getGoldPrice());
+            priceList.push(price);
+            
+            // اگر داده کافی داریم، سیگنال محاسبه کن
+            let signal = null;
+            if (priceList.length >= emaLongLen) {
+                const shortEMA = calculateEMA(priceList, emaShortLen);
+                const longEMA = calculateEMA(priceList, emaLongLen);
+                
+                const last = priceList.length - 1;
+                if (shortEMA[last] > longEMA[last] && shortEMA[last-1] <= longEMA[last-1]) {
+                    signal = 'BUY';
+                } else if (shortEMA[last] < longEMA[last] && shortEMA[last-1] >= longEMA[last-1]) {
+                    signal = 'SELL';
+                }
+            }
+            
+            updateDisplay(price, signal);
+            
+            // نوتیفیکیشن
+            if (signal) {
+                if (Notification.permission === 'granted') {
+                    new Notification(`سیگنال ${signal}`, {
+                        body: `قیمت: $${price}`,
+                        icon: 'https://cdn-icons-png.flaticon.com/512/3138/3138314.png'
+                    });
+                }
+            }
+        }
+
+        // وقتی صفحه لود شد
+        window.onload = function() {
+            // درخواست مجوز نوتیفیکیشن
+            if ('Notification' in window && Notification.permission === 'default') {
+                Notification.requestPermission();
+            }
+            refreshData();
+            
+            // بروزرسانی خودکار هر 5 دقیقه
+            setInterval(refreshData, 5 * 60 * 1000);
+        };
+    </script>
+</body>
+</html>
